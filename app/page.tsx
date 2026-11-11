@@ -1,8 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import confetti from 'canvas-confetti';
+import { useCallback, useRef, useState } from 'react';
 import { AlertCircle, Loader2 } from 'lucide-react';
 import Header from '@/components/Header';
 import Dropzone from '@/components/Dropzone';
@@ -11,15 +10,7 @@ import TransportBar from '@/components/TransportBar';
 import type { WaveformHandle } from '@/components/WaveformView';
 import type { PianoRollHandle } from '@/components/PianoRoll';
 import { useConverterStore } from '@/lib/store/useConverterStore';
-import {
-  getAuditionTime,
-  pauseAudition,
-  scheduleAudition,
-  seekAudition,
-  setSynthVolume,
-  stopAudition,
-  unlockAudio,
-} from '@/lib/audio/synth';
+import { usePlayback } from '@/hooks/usePlayback';
 
 /* Canvas-heavy components are client-only. */
 const WaveformView = dynamic(() => import('@/components/WaveformView'), {
@@ -57,14 +48,6 @@ export default function Page() {
 
   const waveRef = useRef<WaveformHandle | null>(null);
   const rollRef = useRef<PianoRollHandle | null>(null);
-  const playheadRef = useRef(0);
-  const rafRef = useRef(0);
-
-  const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [volume, setVolume] = useState(0.8);
-  const [soloSynth, setSoloSynth] = useState(true);
-  const [soloAudio, setSoloAudio] = useState(true);
   const [exporting, setExporting] = useState(false);
 
   const busy = status === 'decoding' || status === 'transcribing';
@@ -76,167 +59,36 @@ export default function Page() {
   const canPlay = !busy && (Boolean(audioUrl) || notes.length > 0);
   const canExport = notes.length > 0;
 
-  /* ---------------- volume routing ---------------- */
-  useEffect(() => {
-    setSynthVolume(soloSynth ? -18 + volume * 18 : -Infinity);
-    waveRef.current?.setMuted(!soloAudio);
-    waveRef.current?.setVolume(volume);
-  }, [volume, soloSynth, soloAudio, audioUrl]);
-
-  /* ---------------- playback loop ---------------- */
-  const stopPlayback = useCallback(() => {
-    cancelAnimationFrame(rafRef.current);
-    waveRef.current?.pause();
-    pauseAudition();
-    setPlaying(false);
-  }, []);
-
-  const startPlayback = useCallback(async () => {
-    if (!canPlay) return;
-    await unlockAudio();
-
-    // If at or near the end, restart from beginning
-    const isAtEnd =
-      effectiveDuration > 0 && playheadRef.current >= effectiveDuration - 0.05;
-    const from = isAtEnd ? 0 : Math.max(0, playheadRef.current);
-
-    playheadRef.current = from;
-    setCurrentTime(from);
-
-    if (audioUrl) {
-      waveRef.current?.seekTo(from);
-      waveRef.current?.setMuted(!soloAudio);
-      waveRef.current?.setVolume(volume);
-      void waveRef.current?.play();
-    }
-
-    if (notes.length > 0) {
-      scheduleAudition(notes, {
-        octaveOffset: settings.octaveOffset,
-        fromTime: from,
-      });
-    }
-
-    setPlaying(true);
-
-    const startTime = performance.now();
-    const startFromTime = from;
-
-    const loop = () => {
-      let t = from;
-      if (audioUrl) {
-        t = waveRef.current?.getCurrentTime() ?? from;
-      } else {
-        const elapsed = (performance.now() - startTime) / 1000;
-        t = startFromTime + elapsed;
-      }
-
-      playheadRef.current = t;
-      setCurrentTime(t);
-
-      // Resync Tone.Transport if audio is playing and drift occurs
-      if (notes.length > 0 && audioUrl) {
-        const synthTime = getAuditionTime();
-        if (Math.abs(synthTime - t) > 0.06) {
-          seekAudition(t);
-        }
-      }
-
-      if (effectiveDuration > 0 && t >= effectiveDuration - 0.02) {
-        stopPlayback();
-        playheadRef.current = effectiveDuration;
-        setCurrentTime(effectiveDuration);
-        return;
-      }
-
-      rafRef.current = requestAnimationFrame(loop);
-    };
-
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(loop);
-  }, [
-    canPlay,
-    effectiveDuration,
-    audioUrl,
-    soloAudio,
+  const {
+    playheadRef,
+    playing,
+    currentTime,
     volume,
+    setVolume,
+    soloSynth,
+    soloAudio,
+    toggleSoloSynth,
+    toggleSoloAudio,
+    togglePlay,
+    rewind,
+    seek,
+    handleWaveTime,
+    handleWaveFinish,
+  } = usePlayback({
+    waveRef,
+    audioUrl,
     notes,
-    settings.octaveOffset,
-    stopPlayback,
-  ]);
-
-  const togglePlay = useCallback(() => {
-    if (playing) stopPlayback();
-    else void startPlayback();
-  }, [playing, startPlayback, stopPlayback]);
-
-  const rewind = useCallback(() => {
-    const wasPlaying = playing;
-    stopPlayback();
-    playheadRef.current = 0;
-    setCurrentTime(0);
-    waveRef.current?.seekTo(0);
-    seekAudition(0);
-    if (wasPlaying) {
-      requestAnimationFrame(() => void startPlayback());
-    }
-  }, [playing, stopPlayback, startPlayback]);
-
-  const handleSeek = useCallback(
-    (targetTime: number) => {
-      const t = Math.max(0, Math.min(effectiveDuration, targetTime));
-      playheadRef.current = t;
-      setCurrentTime(t);
-      waveRef.current?.seekTo(t);
-      seekAudition(t);
-    },
-    [effectiveDuration],
-  );
-
-  /* Spacebar and R keyboard shortcuts for Play, Pause, Replay */
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      const el = e.target as HTMLElement | null;
-      if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
-
-      if (e.code === 'Space') {
-        // Space already activates a focused button / combobox natively.
-        if (el?.closest('button, [role="combobox"], [role="option"]')) return;
-        e.preventDefault();
-        togglePlay();
-      } else if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) {
-        e.preventDefault();
-        rewind();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [togglePlay, rewind]);
-
-  /* Stop playback whenever the source audio changes. */
-  useEffect(() => {
-    stopPlayback();
-    stopAudition();
-    playheadRef.current = 0;
-    setCurrentTime(0);
-  }, [audioUrl, stopPlayback]);
-
-  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
-
-  /* Re-schedule the synth when the note set or octave changes mid-playback. */
-  useEffect(() => {
-    if (!playing || !soloSynth) return;
-    scheduleAudition(notes, {
-      octaveOffset: settings.octaveOffset,
-      fromTime: playheadRef.current,
-    });
-  }, [notes, settings.octaveOffset, soloSynth, playing]);
+    octaveOffset: settings.octaveOffset,
+    duration: effectiveDuration,
+    canPlay,
+  });
 
   /* ---------------- export ---------------- */
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
       await exportMidi();
+      const { default: confetti } = await import('canvas-confetti');
       void confetti({
         particleCount: 90,
         spread: 70,
@@ -324,19 +176,8 @@ export default function Page() {
         <WaveformView
           ref={waveRef}
           url={audioUrl}
-          onTime={(t) => {
-            if (!audioUrl) return;
-            playheadRef.current = t;
-            setCurrentTime(t);
-            if (!playing) {
-              seekAudition(t);
-            }
-          }}
-          onFinish={() => {
-            stopPlayback();
-            playheadRef.current = effectiveDuration;
-            setCurrentTime(effectiveDuration);
-          }}
+          onTime={handleWaveTime}
+          onFinish={handleWaveFinish}
         />
 
         <section aria-labelledby="piano-roll-heading" className="space-y-2">
@@ -390,7 +231,7 @@ export default function Page() {
               selectedId={selectedNoteId}
               onSelect={selectNote}
               onNotesChange={commitNotes}
-              onSeek={handleSeek}
+              onSeek={seek}
             />
           )}
         </section>
@@ -406,8 +247,8 @@ export default function Page() {
         onVolume={setVolume}
         soloSynth={soloSynth}
         soloAudio={soloAudio}
-        onSoloSynth={() => setSoloSynth((s) => !s)}
-        onSoloAudio={() => setSoloAudio((s) => !s)}
+        onSoloSynth={toggleSoloSynth}
+        onSoloAudio={toggleSoloAudio}
         onExport={handleExport}
         exporting={exporting}
         canExport={canExport}

@@ -1,4 +1,3 @@
-import { Midi } from '@tonejs/midi';
 import type { ConverterSettings, TranscribedNote } from '@/types/audio-midi';
 import { clamp } from '@/lib/utils';
 
@@ -6,10 +5,12 @@ import { clamp } from '@/lib/utils';
  * Serialize transcribed notes into a Standard MIDI File (Type 1).
  * Applies the audition octave offset so the exported file matches preview.
  */
-export function notesToMidiBytes(
+export async function notesToMidiBytes(
   notes: TranscribedNote[],
   settings: ConverterSettings,
-): Uint8Array {
+): Promise<Uint8Array> {
+  // Loaded on demand: only needed when the user exports.
+  const { Midi } = await import('@tonejs/midi');
   const midi = new Midi();
   midi.header.setTempo(settings.tempoBpm);
   midi.header.timeSignatures = [{ ticks: 0, timeSignature: [4, 4] }];

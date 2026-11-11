@@ -1,6 +1,6 @@
 'use client';
 
-import * as Tone from 'tone';
+import type * as ToneNS from 'tone';
 import type { TranscribedNote } from '@/types/audio-midi';
 import { clamp } from '@/lib/utils';
 
@@ -11,16 +11,35 @@ interface PartEvent {
   velocity: number;
 }
 
-let synth: Tone.PolySynth<Tone.Synth> | null = null;
-let volumeNode: Tone.Volume | null = null;
-let currentPart: Tone.Part<PartEvent> | null = null;
+/**
+ * Tone.js is ~250 kB, so it is loaded on demand (idle preload or first
+ * play) instead of in the initial bundle. Until then the transport
+ * functions below are no-ops.
+ */
+let Tone: typeof ToneNS | null = null;
+let tonePromise: Promise<typeof ToneNS> | null = null;
+
+function loadTone(): Promise<typeof ToneNS> {
+  tonePromise ??= import('tone').then((mod) => (Tone = mod));
+  return tonePromise;
+}
+
+/** Warm the Tone.js chunk without touching the AudioContext. */
+export function preloadAudio(): void {
+  void loadTone();
+}
+
+let synth: ToneNS.PolySynth<ToneNS.Synth> | null = null;
+let volumeNode: ToneNS.Volume | null = null;
+let volumeDb = -6;
+let currentPart: ToneNS.Part<PartEvent> | null = null;
 let currentNotes: TranscribedNote[] = [];
 let currentOctaveOffset = 0;
 
-export function getSynth(): Tone.PolySynth<Tone.Synth> {
+function getSynth(T: typeof ToneNS): ToneNS.PolySynth<ToneNS.Synth> {
   if (!synth) {
-    volumeNode = new Tone.Volume(-6).toDestination();
-    synth = new Tone.PolySynth(Tone.Synth, {
+    volumeNode = new T.Volume(volumeDb).toDestination();
+    synth = new T.PolySynth(T.Synth, {
       oscillator: { type: 'triangle' },
       envelope: { attack: 0.005, decay: 0.12, sustain: 0.5, release: 0.25 },
     }).connect(volumeNode);
@@ -30,23 +49,28 @@ export function getSynth(): Tone.PolySynth<Tone.Synth> {
 }
 
 export function setSynthVolume(db: number) {
-  if (!volumeNode) getSynth();
+  volumeDb = db;
   volumeNode?.volume.rampTo(db, 0.05);
 }
 
 export async function unlockAudio(): Promise<void> {
-  if (Tone.getContext().state !== 'running') {
-    await Tone.start();
+  const T = await loadTone();
+  if (T.getContext().state !== 'running') {
+    await T.start();
   }
 }
 
-export const midiToNoteName = (midi: number): string =>
-  Tone.Frequency(clamp(Math.round(midi), 0, 127), 'midi').toNote();
+const midiToNoteName = (T: typeof ToneNS, midi: number): string =>
+  T.Frequency(clamp(Math.round(midi), 0, 127), 'midi').toNote();
 
 export function previewNote(pitch: number, duration = 0.2, velocity = 0.8): void {
-  const s = getSynth();
+  if (!Tone) {
+    void unlockAudio().then(() => previewNote(pitch, duration, velocity));
+    return;
+  }
+  const s = getSynth(Tone);
   s.triggerAttackRelease(
-    midiToNoteName(pitch),
+    midiToNoteName(Tone, pitch),
     duration,
     undefined,
     clamp(velocity, 0.05, 1),
@@ -68,9 +92,10 @@ export function syncAuditionNotes(
     currentPart = null;
   }
 
-  if (!notes.length) return;
+  if (!notes.length || !Tone) return;
 
-  const s = getSynth();
+  const T = Tone;
+  const s = getSynth(T);
   const octave = clamp(Math.round(octaveOffset), -2, 2) * 12;
 
   const events = notes
@@ -82,9 +107,9 @@ export function syncAuditionNotes(
       velocity: clamp(n.velocity, 0.05, 1),
     }));
 
-  const part = new Tone.Part<PartEvent>((time, note) => {
+  const part = new T.Part<PartEvent>((time, note) => {
     s.triggerAttackRelease(
-      midiToNoteName(note.pitch),
+      midiToNoteName(T, note.pitch),
       note.duration,
       time,
       note.velocity,
@@ -108,16 +133,18 @@ export function scheduleAudition(
   notes: TranscribedNote[],
   opts: ScheduleOptions,
 ): number {
-  const s = getSynth();
+  if (!Tone) return 0;
+  const T = Tone;
+  const s = getSynth(T);
   s.releaseAll();
 
   syncAuditionNotes(notes, opts.octaveOffset);
 
   const from = Math.max(0, opts.fromTime);
-  Tone.Transport.seconds = from;
+  T.Transport.seconds = from;
 
-  if (Tone.Transport.state !== 'started') {
-    Tone.Transport.start();
+  if (T.Transport.state !== 'started') {
+    T.Transport.start();
   }
 
   // Note chasing: if fromTime falls inside an active note, trigger its remainder
@@ -127,9 +154,9 @@ export function scheduleAudition(
     if (n.startTime < from && n.startTime + n.duration > from + 0.05) {
       const remaining = n.startTime + n.duration - from;
       s.triggerAttackRelease(
-        midiToNoteName(n.pitch + octave),
+        midiToNoteName(T, n.pitch + octave),
         remaining,
-        Tone.now() + 0.01,
+        T.now() + 0.01,
         clamp(n.velocity, 0.05, 1),
       );
     }
@@ -143,13 +170,14 @@ export function scheduleAudition(
 }
 
 export function pauseAudition(): void {
-  if (Tone.Transport.state === 'started') {
+  if (Tone?.Transport.state === 'started') {
     Tone.Transport.pause();
   }
   synth?.releaseAll();
 }
 
 export function stopAudition(): void {
+  if (!Tone) return;
   if (Tone.Transport.state !== 'stopped') {
     Tone.Transport.stop();
   }
@@ -158,22 +186,24 @@ export function stopAudition(): void {
 }
 
 export function seekAudition(toTime: number): void {
+  if (!Tone) return;
+  const T = Tone;
   const t = Math.max(0, toTime);
-  Tone.Transport.seconds = t;
+  T.Transport.seconds = t;
   synth?.releaseAll();
 
   // If transport is actively playing, chase any note spanning toTime
-  if (Tone.Transport.state === 'started' && currentNotes.length > 0) {
-    const s = getSynth();
+  if (T.Transport.state === 'started' && currentNotes.length > 0) {
+    const s = getSynth(T);
     const octave = clamp(Math.round(currentOctaveOffset), -2, 2) * 12;
     for (const n of currentNotes) {
       if (n.muted) continue;
       if (n.startTime < t && n.startTime + n.duration > t + 0.05) {
         const remaining = n.startTime + n.duration - t;
         s.triggerAttackRelease(
-          midiToNoteName(n.pitch + octave),
+          midiToNoteName(T, n.pitch + octave),
           remaining,
-          Tone.now() + 0.01,
+          T.now() + 0.01,
           clamp(n.velocity, 0.05, 1),
         );
       }
@@ -182,7 +212,7 @@ export function seekAudition(toTime: number): void {
 }
 
 export function getAuditionTime(): number {
-  return Tone.Transport.seconds;
+  return Tone?.Transport.seconds ?? 0;
 }
 
 
