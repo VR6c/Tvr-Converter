@@ -1,13 +1,13 @@
 'use client';
 
 import {
-  forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
   useState,
+  type Ref,
 } from 'react';
 import type { ConverterSettings, TranscribedNote } from '@/types/audio-midi';
 import {
@@ -52,6 +52,8 @@ export interface PianoRollHandle {
 }
 
 interface Props {
+  /** Passed as a plain prop: next/dynamic does not forward `ref`. */
+  handleRef?: Ref<PianoRollHandle>;
   notes: TranscribedNote[];
   settings: ConverterSettings;
   duration: number;
@@ -107,8 +109,8 @@ const splitArray = (arr: number[] | undefined, ratio: number) => {
   return [arr.slice(0, i), arr.slice(i)] as const;
 };
 
-const PianoRoll = forwardRef<PianoRollHandle, Props>(function PianoRoll(
-  {
+export default function PianoRoll({
+    handleRef,
     notes,
     settings,
     duration,
@@ -118,9 +120,7 @@ const PianoRoll = forwardRef<PianoRollHandle, Props>(function PianoRoll(
     onSelect,
     onNotesChange,
     onSeek,
-  },
-  ref,
-) {
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
@@ -793,7 +793,7 @@ const PianoRoll = forwardRef<PianoRollHandle, Props>(function PianoRoll(
     return () => cancelAnimationFrame(playRafRef.current);
   }, [playing]);
 
-  useImperativeHandle(ref, () => ({
+  useImperativeHandle(handleRef, () => ({
     redraw: () => drawRef.current(),
     centerOnPitch: (pitch: number) => centerOnPitch(pitch),
   }));
@@ -1264,6 +1264,4 @@ const PianoRoll = forwardRef<PianoRollHandle, Props>(function PianoRoll(
       </div>
     </div>
   );
-});
-
-export default PianoRoll;
+}

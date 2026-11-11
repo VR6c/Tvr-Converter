@@ -1,10 +1,10 @@
 'use client';
 
 import {
-  forwardRef,
   useEffect,
   useImperativeHandle,
   useRef,
+  type Ref,
 } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { useTheme } from '@/hooks/useTheme';
@@ -20,25 +20,38 @@ export interface WaveformHandle {
 }
 
 interface Props {
+  /**
+   * Imperative handle. Passed as a plain prop (not `ref`) because this
+   * component is loaded through next/dynamic, which does not forward refs.
+   */
+  handleRef?: Ref<WaveformHandle>;
   url: string | null;
   height?: number;
   onReady?: (duration: number) => void;
   onTime?: (t: number) => void;
   onFinish?: () => void;
+  onError?: (err: unknown) => void;
 }
 
 const WAVE_COLOR = { dark: 'rgba(255,255,255,0.22)', light: 'rgba(0,0,0,0.25)' };
 const PROGRESS_COLOR = { dark: '#35c2b2', light: '#0f8a7d' };
 
-const WaveformView = forwardRef<WaveformHandle, Props>(function WaveformView(
-  { url, height = 96, onReady, onTime, onFinish },
-  ref,
-) {
+export default function WaveformView({
+  handleRef,
+  url,
+  height = 96,
+  onReady,
+  onTime,
+  onFinish,
+  onError,
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
   const { theme } = useTheme();
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -81,15 +94,16 @@ const WaveformView = forwardRef<WaveformHandle, Props>(function WaveformView(
     const ws = wsRef.current;
     if (!ws) return;
     if (url) {
-      ws.load(url).catch(() => {
-        /* decode failures surface through the store */
+      ws.load(url).catch((err) => {
+        // Superseded loads are aborted on purpose (new file picked); not an error.
+        if ((err as DOMException)?.name !== 'AbortError') onErrorRef.current?.(err);
       });
     } else {
       ws.empty();
     }
   }, [url]);
 
-  useImperativeHandle(ref, () => ({
+  useImperativeHandle(handleRef, () => ({
     play: () => {
       const ws = wsRef.current;
       if (!ws) return;
@@ -121,7 +135,5 @@ const WaveformView = forwardRef<WaveformHandle, Props>(function WaveformView(
       )}
     </section>
   );
-});
-
-export default WaveformView;
+}
 

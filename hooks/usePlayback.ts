@@ -81,7 +81,8 @@ export function usePlayback({
       waveRef.current?.seekTo(from);
       waveRef.current?.setMuted(!soloAudio);
       waveRef.current?.setVolume(volume);
-      void waveRef.current?.play();
+      // A quick Play -> Pause rejects play() with an AbortError; that's expected.
+      Promise.resolve(waveRef.current?.play()).catch(() => {});
     }
 
     if (notes.length > 0) {
@@ -108,10 +109,11 @@ export function usePlayback({
       playheadRef.current = t;
       setCurrentTime(t);
 
-      // Resync Tone.Transport if audio is playing and drift occurs
-      if (notes.length > 0 && audioUrl) {
+      // Resync Tone.Transport if audio is playing and drift occurs. The media
+      // element starts late, so give it a moment before treating that as drift.
+      if (notes.length > 0 && audioUrl && performance.now() - startTime > 400) {
         const synthTime = getAuditionTime();
-        if (Math.abs(synthTime - t) > 0.06) {
+        if (Math.abs(synthTime - t) > 0.12) {
           seekAudition(t);
         }
       }

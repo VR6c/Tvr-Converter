@@ -6,6 +6,7 @@ import { AlertCircle, Download, Loader2 } from 'lucide-react';
 import Header from '@/components/Header';
 import Dropzone from '@/components/Dropzone';
 import ControlToolbar from '@/components/ControlToolbar';
+import PreviewControls from '@/components/PreviewControls';
 import type { WaveformHandle } from '@/components/WaveformView';
 import type { PianoRollHandle } from '@/components/PianoRoll';
 import { useConverterStore } from '@/lib/store/useConverterStore';
@@ -55,12 +56,22 @@ export default function Page() {
     0,
   );
   const effectiveDuration = audioDuration > 0 ? audioDuration : notesDuration;
-  const canPlay = !busy && (Boolean(audioUrl) || notes.length > 0);
+  // The original audio plays as soon as it is decoded; transcription may still be running.
+  const canPlay = audioUrl
+    ? audioDuration > 0
+    : status !== 'decoding' && notes.length > 0;
   const canExport = notes.length > 0;
 
   const {
     playheadRef,
     playing,
+    currentTime,
+    volume,
+    setVolume,
+    soloSynth,
+    soloAudio,
+    toggleSoloSynth,
+    toggleSoloAudio,
     togglePlay,
     rewind,
     seek,
@@ -95,6 +106,15 @@ export default function Page() {
       setExporting(false);
     }
   }, [exportMidi]);
+
+  const handleWaveError = useCallback((err: unknown) => {
+    console.error('[waveform] could not load audio', err);
+    useConverterStore.setState({
+      error: `Could not load the audio for playback${
+        err instanceof Error && err.message ? `: ${err.message}` : '.'
+      }`,
+    });
+  }, []);
 
   /* ---------------- mic recording -> pipeline ---------------- */
   const handleRecording = useCallback(
@@ -166,10 +186,11 @@ export default function Page() {
         />
 
         <WaveformView
-          ref={waveRef}
+          handleRef={waveRef}
           url={audioUrl}
           onTime={handleWaveTime}
           onFinish={handleWaveFinish}
+          onError={handleWaveError}
         />
 
         <section aria-labelledby="piano-roll-heading" className="space-y-2">
@@ -211,6 +232,22 @@ export default function Page() {
             </div>
           </div>
 
+          <PreviewControls
+            playing={playing}
+            onTogglePlay={togglePlay}
+            onRewind={rewind}
+            onSeek={seek}
+            currentTime={currentTime}
+            duration={effectiveDuration}
+            volume={volume}
+            onVolume={setVolume}
+            soloSynth={soloSynth}
+            soloAudio={soloAudio}
+            onSoloSynth={toggleSoloSynth}
+            onSoloAudio={toggleSoloAudio}
+            canPlay={canPlay}
+          />
+
           {notes.length === 0 && !busy ? (
             <div
               role="status"
@@ -223,7 +260,7 @@ export default function Page() {
             </div>
           ) : (
             <PianoRoll
-              ref={rollRef}
+              handleRef={rollRef}
               notes={notes}
               settings={settings}
               duration={effectiveDuration}
