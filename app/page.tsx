@@ -7,6 +7,7 @@ import { AlertCircle, Keyboard, Loader2 } from 'lucide-react';
 import Header from '@/components/Header';
 import Dropzone from '@/components/Dropzone';
 import ControlToolbar from '@/components/ControlToolbar';
+import YoutubeKeyBpmDetector from '@/components/YoutubeKeyBpmDetector';
 import TransportBar from '@/components/TransportBar';
 import type { WaveformHandle } from '@/components/WaveformView';
 import type { PianoRollHandle } from '@/components/PianoRoll';
@@ -295,6 +296,12 @@ export default function Page() {
         onFile={(f) => void loadFile(f)}
         onRecording={handleRecording}
         onClear={reset}
+      />
+
+      <YoutubeKeyBpmDetector
+        settings={settings}
+        onApply={updateSettings}
+        disabled={busy}
       />
 
       <ControlToolbar

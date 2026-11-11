@@ -84,6 +84,20 @@ Audio Input  (mic / file drop: .wav .mp3 .m4a .flac)
 
 ---
 
+## YouTube Key & BPM Detection
+
+Paste a YouTube link to look up a track's key and tempo, then apply them to the scale snap and timing grid. `POST /api/detect-key-bpm` resolves it in three tiers:
+
+1. **Cache** — Upstash Redis, keyed `yt:key_bpm:{videoId}`, 30-day TTL (in-memory when Redis is not configured).
+2. **Metadata** — oEmbed title → cleaned `artist` / `track` → Spotify search + audio features. Remixes, live takes and other variants only match a Spotify release of the same kind.
+3. **Audio DSP** — the route fetches a 45 s clip with `yt-dlp`, decodes it with `ffmpeg`, and runs the app's own tempo detector plus an audio key detector (`lib/dsp/audioKey.ts`) in-process.
+
+No configuration is required: with `yt-dlp` and `ffmpeg` installed (`brew install yt-dlp ffmpeg`), tier 3 handles every link. Redis and Spotify are optional accelerators, configured via `.env.local` (see `.env.example`).
+
+**On Vercel** the install step downloads a Linux `yt-dlp` into `bin/` and `ffmpeg-static` supplies `ffmpeg`; both are shipped with the API function. YouTube often refuses requests from cloud IPs — if lookups fail with "YouTube refused this server's request", set `YT_DLP_PROXY` to a residential proxy URL. Adding Upstash Redis is recommended there so each video is only fetched once.
+
+---
+
 ## Project Structure
 
 ```
