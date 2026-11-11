@@ -18,13 +18,12 @@ interface Props {
   onChange: (patch: Partial<ConverterSettings>) => void;
   onAutoDetectKey?: () => void;
   onAutoDetectTempo?: () => void;
-  onAutoDetect?: () => void;
   detectedKeyLabel: string | null;
   detectedTempoLabel?: string | null;
   disabled?: boolean;
 }
 
-const SEG = 'flex rounded-lg bg-black/30 p-0.5 gap-0.5';
+const SEG = 'inline-flex rounded border border-line bg-surface-sunken p-0.5 gap-0.5';
 
 function Segmented<T extends string>({
   value,
@@ -38,18 +37,19 @@ function Segmented<T extends string>({
   disabled?: boolean;
 }) {
   return (
-    <div className={SEG}>
+    <div className={SEG} role="group">
       {options.map((o) => (
         <button
           key={o.value}
           type="button"
+          aria-pressed={value === o.value}
           disabled={disabled}
           onClick={() => onSelect(o.value)}
           className={cn(
-            'rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40',
+            'rounded-sm px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40',
             value === o.value
-              ? 'bg-brand-500 text-white shadow-sm'
-              : 'text-white/55 hover:bg-white/10 hover:text-white/80',
+              ? 'bg-brand-500 text-white'
+              : 'text-neutral-400 hover:bg-neutral-100/5 hover:text-neutral-200',
           )}
         >
           {o.label}
@@ -67,10 +67,8 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-wider text-white/30">
-        {label}
-      </span>
+    <div className="flex flex-col items-start gap-1.5">
+      <span className="text-xs text-neutral-500">{label}</span>
       {children}
     </div>
   );
@@ -91,15 +89,12 @@ export default function ControlToolbar({
   onChange,
   onAutoDetectKey,
   onAutoDetectTempo,
-  onAutoDetect,
   detectedKeyLabel,
   detectedTempoLabel,
   disabled,
 }: Props) {
   const tapTimesRef = useRef<number[]>([]);
   const [tapCount, setTapCount] = useState(0);
-
-  const handleKeyDetect = onAutoDetectKey ?? onAutoDetect;
 
   const handleTapTempo = () => {
     const now = performance.now();
@@ -125,8 +120,11 @@ export default function ControlToolbar({
   };
 
   return (
-    <section className="rounded-2xl border border-white/5 bg-[#12151c]/60 p-4">
-      <div className="flex flex-wrap items-end gap-x-5 gap-y-4">
+    <section
+      aria-label="Transcription settings"
+      className="rounded-md border border-line bg-surface p-4"
+    >
+      <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Mode">
           <Segmented<ProcessingMode>
             value={settings.mode}
@@ -140,7 +138,7 @@ export default function ControlToolbar({
         </Field>
 
         <Field label="Key & Scale">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Select
               aria-label="Key"
               className="w-[4.5rem]"
@@ -159,13 +157,13 @@ export default function ControlToolbar({
               options={SCALE_OPTIONS}
             />
 
-            {handleKeyDetect && (
+            {onAutoDetectKey && (
               <button
                 type="button"
-                onClick={handleKeyDetect}
+                onClick={onAutoDetectKey}
                 disabled={disabled}
                 title="Auto-detect musical key & scale from transcribed notes"
-                className="inline-flex items-center gap-1 rounded-lg border border-brand-500/30 bg-brand-500/10 px-2.5 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/20 disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-1 rounded border border-line-strong px-2.5 py-1.5 text-xs font-medium text-brand-300 hover:bg-neutral-100/5 disabled:opacity-40 transition-colors"
               >
                 <Wand2 className="h-3 w-3" /> Auto Detect
               </button>
@@ -214,9 +212,10 @@ export default function ControlToolbar({
         </Field>
 
         <Field label="Tempo (BPM)">
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             <input
               type="number"
+              aria-label="Tempo in BPM"
               min={40}
               max={240}
               step={1}
@@ -228,7 +227,7 @@ export default function ControlToolbar({
                   onChange({ tempoBpm: Math.min(240, Math.max(40, v)) });
                 }
               }}
-              className="w-18 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-white/85 outline-none focus:border-brand-500/60 disabled:opacity-40"
+              className="w-16 rounded border border-line bg-surface-sunken px-2 py-1.5 font-mono text-xs text-neutral-200 outline-none focus:border-brand-400 disabled:opacity-40"
             />
 
             {onAutoDetectTempo && (
@@ -237,23 +236,23 @@ export default function ControlToolbar({
                 onClick={onAutoDetectTempo}
                 disabled={disabled}
                 title="Auto-detect BPM from audio onset energy and note timing"
-                className="inline-flex items-center gap-1 rounded-lg border border-brand-500/30 bg-brand-500/10 px-2.5 py-1.5 text-xs font-medium text-brand-300 hover:bg-brand-500/20 disabled:opacity-40 transition-colors"
+                className="inline-flex items-center gap-1 rounded border border-line-strong px-2.5 py-1.5 text-xs font-medium text-brand-300 hover:bg-neutral-100/5 disabled:opacity-40 transition-colors"
               >
                 <Wand2 className="h-3 w-3" /> Auto Detect
               </button>
             )}
 
-            <div className="flex items-center rounded-lg bg-black/30 p-0.5 gap-0.5">
+            <div className="inline-flex items-center rounded border border-line bg-surface-sunken p-0.5 gap-0.5">
               <button
                 type="button"
                 onClick={handleTapTempo}
                 disabled={disabled}
                 title="Tap along to rhythmic beat to set tempo"
                 className={cn(
-                  'rounded-md px-2 py-1 text-[11px] font-semibold transition-colors disabled:opacity-40',
+                  'rounded-sm px-2 py-1 text-xs font-semibold transition-colors disabled:opacity-40',
                   tapCount > 1
-                    ? 'bg-brand-500/30 text-brand-200'
-                    : 'text-white/60 hover:bg-white/10 hover:text-white',
+                    ? 'bg-brand-500 text-white'
+                    : 'text-neutral-300 hover:bg-neutral-100/5 hover:text-neutral-100',
                 )}
               >
                 TAP
@@ -267,7 +266,7 @@ export default function ControlToolbar({
                 }
                 disabled={disabled || settings.tempoBpm <= 40}
                 title="Halve tempo (/2)"
-                className="rounded-md px-1.5 py-1 text-[11px] font-medium text-white/50 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-40"
+                className="rounded-sm px-1.5 py-1 font-mono text-xs text-neutral-400 hover:bg-neutral-100/5 hover:text-neutral-100 transition-colors disabled:opacity-40"
               >
                 /2
               </button>
@@ -280,7 +279,7 @@ export default function ControlToolbar({
                 }
                 disabled={disabled || settings.tempoBpm >= 240}
                 title="Double tempo (x2)"
-                className="rounded-md px-1.5 py-1 text-[11px] font-medium text-white/50 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-40"
+                className="rounded-sm px-1.5 py-1 font-mono text-xs text-neutral-400 hover:bg-neutral-100/5 hover:text-neutral-100 transition-colors disabled:opacity-40"
               >
                 x2
               </button>
@@ -305,24 +304,24 @@ export default function ControlToolbar({
       </div>
 
       {(detectedKeyLabel || detectedTempoLabel) && (
-        <div className="mt-3 flex flex-wrap items-center gap-2.5 border-t border-white/5 pt-3">
+        <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-3 text-xs">
           {detectedKeyLabel && (
-            <div className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-300">
-              <Sparkles className="h-3 w-3 text-emerald-400" />
+            <div className="inline-flex items-center gap-1.5 text-neutral-400">
+              <Sparkles className="h-3 w-3 text-brand-400" aria-hidden />
               <span>
                 Detected Key:{' '}
-                <strong className="font-semibold text-emerald-200">
+                <strong className="font-mono font-medium text-neutral-100">
                   {detectedKeyLabel}
                 </strong>
               </span>
             </div>
           )}
           {detectedTempoLabel && (
-            <div className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-xs text-cyan-300">
-              <Gauge className="h-3 w-3 text-cyan-400" />
+            <div className="inline-flex items-center gap-1.5 text-neutral-400">
+              <Gauge className="h-3 w-3 text-brand-400" aria-hidden />
               <span>
                 Detected Tempo:{' '}
-                <strong className="font-semibold text-cyan-200">
+                <strong className="font-mono font-medium text-neutral-100">
                   {detectedTempoLabel}
                 </strong>
               </span>

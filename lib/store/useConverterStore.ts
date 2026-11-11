@@ -5,6 +5,7 @@ import type {
   ConverterSettings,
   ExecutionProvider,
   TranscribedNote,
+  WorkerResponse,
 } from '@/types/audio-midi';
 import {
   decodeAudioFile,
@@ -37,7 +38,6 @@ interface ConverterState {
   fileName: string | null;
   audioUrl: string | null;
   audioDuration: number;
-  audioPeaks: Float32Array | null;
   privateSamples: Float32Array | null;
   baseNotes: TranscribedNote[]; // raw inference output
   notes: TranscribedNote[];     // corrected / edited notes
@@ -57,7 +57,6 @@ interface ConverterState {
   updateSettings: (patch: Partial<ConverterSettings>) => void;
   autoDetectKey: () => void;
   autoDetectTempo: () => void;
-  autoDetectAll: () => void;
   commitNotes: (notes: TranscribedNote[]) => void;
   selectNote: (id: string | null) => void;
   exportMidi: () => Promise<void>;
@@ -65,6 +64,15 @@ interface ConverterState {
 }
 
 let unsubscribeWorker: (() => void) | null = null;
+/** Id of the transcription whose results are still wanted; 0 = none. */
+let activeJob = 0;
+let jobCounter = 0;
+
+const formatKeyLabel = (r: { root: string; scaleMode: string; confidence: number }) =>
+  `${r.root} ${r.scaleMode === 'major' ? 'Major' : 'Minor'} · ${Math.round(r.confidence * 100)}%`;
+
+const formatTempoLabel = (r: { bpm: number; confidence: number }) =>
+  `${r.bpm} BPM · ${Math.round(r.confidence * 100)}%`;
 
 export const useConverterStore = create<ConverterState>((set, get) => {
   /* ---------------- worker wiring ---------------- */
@@ -72,11 +80,12 @@ export const useConverterStore = create<ConverterState>((set, get) => {
     if (unsubscribeWorker) return;
     getInferenceWorker();
     unsubscribeWorker = onWorkerMessage((raw) => {
-      const msg = raw as
-        | { type: 'progress'; value: number }
-        | { type: 'provider'; provider: ExecutionProvider }
-        | { type: 'result'; notes: TranscribedNote[] }
-        | { type: 'error'; message: string };
+      const msg = raw as WorkerResponse;
+
+      // Drop results of superseded or cancelled jobs (new file loaded, reset).
+      if ('jobId' in msg && msg.jobId !== undefined && msg.jobId !== activeJob) {
+        return;
+      }
 
       switch (msg.type) {
         case 'progress':
@@ -97,9 +106,7 @@ export const useConverterStore = create<ConverterState>((set, get) => {
 
           if (rawNotes.length > 0) {
             const keyRes = detectKey(rawNotes);
-            detectedKeyLabel = `${keyRes.root} ${
-              keyRes.scaleMode === 'major' ? 'Major' : 'Minor'
-            } · ${Math.round(keyRes.confidence * 100)}%`;
+            detectedKeyLabel = formatKeyLabel(keyRes);
 
             // If keyRoot is 'auto', adopt detected key directly
             if (currentSettings.keyRoot === 'auto') {
@@ -117,9 +124,9 @@ export const useConverterStore = create<ConverterState>((set, get) => {
             notes: rawNotes,
           });
 
-          if (tempoRes && tempoRes.confidence > 0) {
+          if (tempoRes.confidence > 0) {
             tempoBpm = tempoRes.bpm;
-            detectedTempoLabel = `${tempoRes.bpm} BPM · ${Math.round(tempoRes.confidence * 100)}%`;
+            detectedTempoLabel = formatTempoLabel(tempoRes);
           }
 
           const newSettings: ConverterSettings = {
@@ -134,6 +141,7 @@ export const useConverterStore = create<ConverterState>((set, get) => {
             newSettings,
           );
 
+          activeJob = 0;
           set({
             baseNotes: rawNotes,
             notes: corrected,
@@ -147,6 +155,7 @@ export const useConverterStore = create<ConverterState>((set, get) => {
           break;
         }
         case 'error':
+          activeJob = 0;
           set({ status: 'error', error: msg.message, progress: 0 });
           break;
       }
@@ -157,7 +166,6 @@ export const useConverterStore = create<ConverterState>((set, get) => {
     fileName: null,
     audioUrl: null,
     audioDuration: 0,
-    audioPeaks: null,
     privateSamples: null,
     baseNotes: [],
     notes: [],
@@ -184,11 +192,15 @@ export const useConverterStore = create<ConverterState>((set, get) => {
       const previousUrl = get().audioUrl;
       if (previousUrl) URL.revokeObjectURL(previousUrl);
 
+      activeJob = 0; // cancel any in-flight transcription of the previous file
       set({
         status: 'decoding',
         error: null,
         progress: 0,
         fileName: file.name,
+        privateSamples: null,
+        audioDuration: 0,
+        selectedNoteId: null,
         notes: [],
         baseNotes: [],
         detectedKeyLabel: null,
@@ -201,7 +213,6 @@ export const useConverterStore = create<ConverterState>((set, get) => {
         set({
           privateSamples: decoded.samples,
           audioDuration: decoded.duration,
-          audioPeaks: decoded.peaks,
           status: 'idle',
         });
         await get().transcribe();
@@ -235,6 +246,7 @@ export const useConverterStore = create<ConverterState>((set, get) => {
         return;
       }
 
+      activeJob = ++jobCounter;
       set({ status: 'transcribing', progress: 0.01, error: null });
 
       // Transfer a copy so the store keeps its own buffer intact.
@@ -242,6 +254,7 @@ export const useConverterStore = create<ConverterState>((set, get) => {
       worker.postMessage(
         {
           type: 'transcribe',
+          jobId: activeJob,
           samples: copy,
           sampleRate: 22050,
           settings: get().settings,
@@ -269,21 +282,19 @@ export const useConverterStore = create<ConverterState>((set, get) => {
       set({
         settings,
         notes: applyMusicalCorrections(get().baseNotes, settings),
-        detectedKeyLabel: `${result.root} ${
-          result.scaleMode === 'major' ? 'Major' : 'Minor'
-        } · ${Math.round(result.confidence * 100)}%`,
+        detectedKeyLabel: formatKeyLabel(result),
       });
     },
 
     autoDetectTempo() {
       const samples = get().privateSamples;
       const source = get().baseNotes.length ? get().baseNotes : get().notes;
+      if (!source.length && !samples) return;
       const result = detectTempo({
         samples: samples ?? undefined,
         sampleRate: 22050,
         notes: source,
       });
-      if (result.confidence <= 0 && !source.length && !samples) return;
       const settings: ConverterSettings = {
         ...get().settings,
         tempoBpm: result.bpm,
@@ -291,13 +302,8 @@ export const useConverterStore = create<ConverterState>((set, get) => {
       set({
         settings,
         notes: applyMusicalCorrections(get().baseNotes, settings),
-        detectedTempoLabel: `${result.bpm} BPM · ${Math.round(result.confidence * 100)}%`,
+        detectedTempoLabel: formatTempoLabel(result),
       });
-    },
-
-    autoDetectAll() {
-      get().autoDetectKey();
-      get().autoDetectTempo();
     },
 
     /* ---------------- editing ---------------- */
@@ -321,13 +327,13 @@ export const useConverterStore = create<ConverterState>((set, get) => {
     },
 
     reset() {
+      activeJob = 0;
       const url = get().audioUrl;
       if (url) URL.revokeObjectURL(url);
       set({
         fileName: null,
         audioUrl: null,
         audioDuration: 0,
-        audioPeaks: null,
         privateSamples: null,
         baseNotes: [],
         notes: [],

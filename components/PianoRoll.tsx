@@ -1213,7 +1213,7 @@ const PianoRoll = forwardRef<PianoRollHandle, Props>(function PianoRoll(
   }, [undo, redo, zoomAround, gridW, shiftOctave, selectedId, notes, commit, onSelect, flashKey, step]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/5 bg-[#0b0d12]">
+    <div className="theme-dark overflow-hidden rounded-xl border border-white/5 bg-[#0b0d12]">
       <PianoRollToolbar
         activeTool={tool}
         onToolChange={setTool}

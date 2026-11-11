@@ -192,7 +192,7 @@ export default function PianoRollToolbar({
           className={cn(
             'inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-medium transition-colors',
             contrastMode
-              ? 'border-indigo-500/40 bg-indigo-500/20 text-indigo-300'
+              ? 'border-brand-500/50 bg-brand-500/20 text-brand-300'
               : 'border-white/5 bg-black/40 text-white/50 hover:bg-white/10 hover:text-white',
           )}
         >

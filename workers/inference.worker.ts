@@ -26,7 +26,9 @@ const ONNX_URL = '/models/basic-pitch.onnx';
 
 /* ---------------- Messaging helpers ---------------- */
 const post = (msg: WorkerResponse) => ctx.postMessage(msg);
-const progress = (v: number) => post({ type: 'progress', value: Math.min(1, Math.max(0, v)) });
+let currentJob = 0;
+const progress = (v: number) =>
+  post({ type: 'progress', jobId: currentJob, value: Math.min(1, Math.max(0, v)) });
 
 /* ---------------- ONNX Runtime (dynamic, optional) ---------------- */
 type OrtModule = typeof import('onnxruntime-web');
@@ -608,7 +610,8 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
   if (!msg || msg.type !== 'transcribe') return;
 
-  const { samples, sampleRate, settings } = msg;
+  const { jobId, samples, sampleRate, settings } = msg;
+  currentJob = jobId;
 
   try {
     progress(0.02);
@@ -632,11 +635,12 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
 
     progress(1);
-    post({ type: 'result', notes });
+    post({ type: 'result', jobId, notes });
   } catch (err) {
     console.error('[worker] transcription failed', err);
     post({
       type: 'error',
+      jobId,
       message: err instanceof Error ? err.message : 'Transcription failed',
     });
   }

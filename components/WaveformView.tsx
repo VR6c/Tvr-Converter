@@ -7,6 +7,7 @@ import {
   useRef,
 } from 'react';
 import WaveSurfer from 'wavesurfer.js';
+import { useTheme } from '@/hooks/useTheme';
 
 export interface WaveformHandle {
   play: () => Promise<void> | void;
@@ -26,21 +27,27 @@ interface Props {
   onFinish?: () => void;
 }
 
+const WAVE_COLOR = { dark: 'rgba(255,255,255,0.22)', light: 'rgba(0,0,0,0.25)' };
+const PROGRESS_COLOR = { dark: '#35c2b2', light: '#0f8a7d' };
+
 const WaveformView = forwardRef<WaveformHandle, Props>(function WaveformView(
   { url, height = 96, onReady, onTime, onFinish },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const wsRef = useRef<WaveSurfer | null>(null);
+  const { theme } = useTheme();
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   useEffect(() => {
     if (!containerRef.current) return;
     const ws = WaveSurfer.create({
       container: containerRef.current,
       height,
-      waveColor: 'rgba(255,255,255,0.22)',
-      progressColor: '#5b8cff',
-      cursorColor: '#8b5cf6',
+      waveColor: WAVE_COLOR[themeRef.current],
+      progressColor: PROGRESS_COLOR[themeRef.current],
+      cursorColor: '#f97316',
       cursorWidth: 1,
       barWidth: 2,
       barGap: 1,
@@ -62,6 +69,13 @@ const WaveformView = forwardRef<WaveformHandle, Props>(function WaveformView(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [height]);
+
+  useEffect(() => {
+    wsRef.current?.setOptions({
+      waveColor: WAVE_COLOR[theme],
+      progressColor: PROGRESS_COLOR[theme],
+    });
+  }, [theme]);
 
   useEffect(() => {
     const ws = wsRef.current;
@@ -94,14 +108,18 @@ const WaveformView = forwardRef<WaveformHandle, Props>(function WaveformView(
   }));
 
   return (
-    <div className="rounded-xl border border-white/5 bg-[#12151c]/60 p-2">
+    <section
+      aria-label="Waveform"
+      className="relative rounded-md border border-line bg-surface p-2"
+      style={{ minHeight: height + 16 }}
+    >
       <div ref={containerRef} className="w-full" />
       {!url && (
-        <p className="py-6 text-center text-xs text-white/30">
+        <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-neutral-500">
           Load audio to see the waveform
         </p>
       )}
-    </div>
+    </section>
   );
 });
 

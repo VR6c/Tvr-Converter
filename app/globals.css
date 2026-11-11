@@ -3,7 +3,47 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
+  --surface: 255 255 255;
+  --surface-raised: 255 255 255;
+  --surface-sunken: 244 245 247;
+  --line: 224 227 232;
+  --line-strong: 199 204 212;
+  --n-100: 23 23 23;
+  --n-200: 38 38 38;
+  --n-300: 64 64 64;
+  --n-400: 82 82 82;
+  --n-500: 102 102 102;
+  --n-600: 140 140 140;
+  --brand-300: 11 90 83;
+  --brand-400: 15 138 125;
+  --page-bg: #f4f5f7;
+  --page-fg: #171717;
+  --scroll-thumb: rgba(0, 0, 0, 0.18);
+  --scroll-thumb-hover: rgba(0, 0, 0, 0.3);
+}
+
+/* `.theme-dark` keeps instrument-style panels (piano roll) dark in light mode. */
+:root.dark,
+.theme-dark {
   color-scheme: dark;
+  --surface: 16 18 22;
+  --surface-raised: 21 24 29;
+  --surface-sunken: 11 12 15;
+  --line: 35 39 47;
+  --line-strong: 50 56 68;
+  --n-100: 245 245 245;
+  --n-200: 229 229 229;
+  --n-300: 212 212 212;
+  --n-400: 163 163 163;
+  --n-500: 115 115 115;
+  --n-600: 82 82 82;
+  --brand-300: 111 220 205;
+  --brand-400: 53 194 178;
+  --page-bg: #0b0c0f;
+  --page-fg: #e4e6ea;
+  --scroll-thumb: rgba(255, 255, 255, 0.12);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.2);
 }
 
 html,
@@ -12,8 +52,8 @@ body {
 }
 
 body {
-  background: #08090c;
-  color: #e7e9ee;
+  background: var(--page-bg);
+  color: var(--page-fg);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -27,12 +67,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--scroll-thumb);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--scroll-thumb-hover);
 }
 
 input[type='range']::-webkit-slider-thumb {
@@ -40,7 +80,7 @@ input[type='range']::-webkit-slider-thumb {
   height: 12px;
   width: 12px;
   border-radius: 9999px;
-  background: #5b8cff;
+  background: #35c2b2;
   cursor: pointer;
 }
 
@@ -64,3 +104,17 @@ input[type='range']::-webkit-slider-thumb {
   animation: shimmer 1.4s linear infinite;
 }
 
+
+:focus-visible {
+  outline: 2px solid rgb(var(--brand-400));
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

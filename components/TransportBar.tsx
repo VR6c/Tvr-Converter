@@ -22,6 +22,9 @@ interface Props {
   noteCount: number;
 }
 
+const TOGGLE =
+  'rounded border px-2.5 py-1.5 text-xs font-medium transition-colors';
+
 export default function TransportBar({
   playing,
   onTogglePlay,
@@ -41,120 +44,116 @@ export default function TransportBar({
   noteCount,
 }: Props) {
   const isEnded = !playing && duration > 0 && currentTime >= duration - 0.05;
+  const PlayIcon = playing ? Pause : isEnded ? RotateCcw : Play;
+  const playLabel = playing ? 'Pause' : isEnded ? 'Replay' : 'Play';
 
   return (
-    <section className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border border-white/5 bg-[#12151c]/60 px-4 py-3">
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={onRewind}
-          disabled={!canPlay}
-          className="rounded-lg p-2 text-white/60 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
-          title="Replay from start (R)"
-          aria-label="Replay from start"
-        >
-          <RotateCcw className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={onTogglePlay}
-          disabled={!canPlay}
-          className={cn(
-            'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40',
-            playing
-              ? 'bg-white/10 text-white hover:bg-white/15'
-              : 'bg-brand-500 text-white hover:bg-brand-400',
-          )}
-          title={
-            playing
-              ? 'Pause (Space)'
-              : isEnded
-                ? 'Replay (Space)'
-                : 'Play (Space)'
-          }
-        >
-          {playing ? (
-            <>
-              <Pause className="h-4 w-4" /> Pause
-            </>
-          ) : isEnded ? (
-            <>
-              <RotateCcw className="h-4 w-4" /> Replay
-            </>
+    <section
+      aria-label="Transport"
+      className="sticky bottom-0 z-20 border-t border-line bg-surface"
+    >
+      <div className="mx-auto flex w-full max-w-[1400px] flex-wrap items-center gap-x-5 gap-y-3 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onRewind}
+            disabled={!canPlay}
+            className="rounded p-2 text-neutral-400 transition-colors hover:bg-neutral-100/5 hover:text-neutral-100 disabled:opacity-40"
+            title="Replay from start (R)"
+            aria-label="Replay from start"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={onTogglePlay}
+            disabled={!canPlay}
+            className={cn(
+              'inline-flex w-24 items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40',
+              playing
+                ? 'border border-line-strong text-neutral-100 hover:bg-neutral-100/5'
+                : 'bg-brand-500 text-white hover:bg-brand-600',
+            )}
+            title={`${playLabel} (Space)`}
+          >
+            <PlayIcon
+              key={playLabel}
+              className="h-4 w-4 animate-in zoom-in-50 fade-in duration-150"
+              aria-hidden
+            /> {playLabel}
+          </button>
+        </div>
+
+        <div className="font-mono text-sm tabular-nums text-neutral-300">
+          {formatTime(currentTime)}
+          <span className="text-neutral-600"> / </span>
+          <span className="text-neutral-500">{formatTime(duration)}</span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {volume === 0 ? (
+            <VolumeX className="h-4 w-4 text-neutral-500" aria-hidden />
           ) : (
-            <>
-              <Play className="h-4 w-4" /> Play
-            </>
+            <Volume2 className="h-4 w-4 text-neutral-500" aria-hidden />
           )}
-        </button>
-      </div>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={(e) => onVolume(Number(e.target.value))}
+            className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-line-strong accent-brand-400"
+            aria-label="Volume"
+          />
+        </div>
 
-      <div className="font-mono text-xs tabular-nums text-white/50">
-        {formatTime(currentTime)} / {formatTime(duration)}
-      </div>
+        <div className="flex items-center gap-1.5" role="group" aria-label="Monitor">
+          <button
+            type="button"
+            onClick={onSoloSynth}
+            aria-pressed={soloSynth}
+            className={cn(
+              TOGGLE,
+              soloSynth
+                ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                : 'border-line text-neutral-500 hover:text-neutral-300',
+            )}
+            title="Toggle synth preview"
+          >
+            Synth
+          </button>
+          <button
+            type="button"
+            onClick={onSoloAudio}
+            aria-pressed={soloAudio}
+            className={cn(
+              TOGGLE,
+              soloAudio
+                ? 'border-brand-500 bg-brand-500/15 text-brand-300'
+                : 'border-line text-neutral-500 hover:text-neutral-300',
+            )}
+            title="Toggle original audio"
+          >
+            Original
+          </button>
+        </div>
 
-      <div className="flex items-center gap-2">
-        {volume === 0 ? (
-          <VolumeX className="h-4 w-4 text-white/40" />
-        ) : (
-          <Volume2 className="h-4 w-4 text-white/40" />
-        )}
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
-          value={volume}
-          onChange={(e) => onVolume(Number(e.target.value))}
-          className="h-1 w-24 cursor-pointer appearance-none rounded-full bg-white/10 accent-brand-500"
-          aria-label="Volume"
-        />
-      </div>
-
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={onSoloSynth}
-          className={cn(
-            'rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
-            soloSynth
-              ? 'border-brand-500/50 bg-brand-500/15 text-brand-300'
-              : 'border-white/10 bg-black/20 text-white/50 hover:text-white/80',
-          )}
-          title="Toggle synth preview"
-        >
-          Solo Synth
-        </button>
-        <button
-          type="button"
-          onClick={onSoloAudio}
-          className={cn(
-            'rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors',
-            soloAudio
-              ? 'border-brand-500/50 bg-brand-500/15 text-brand-300'
-              : 'border-white/10 bg-black/20 text-white/50 hover:text-white/80',
-          )}
-          title="Toggle original audio"
-        >
-          Solo Audio
-        </button>
-      </div>
-
-      <div className="ml-auto flex items-center gap-3">
-        <span className="text-xs text-white/35">
-          {noteCount} note{noteCount === 1 ? '' : 's'}
-        </span>
-        <button
-          type="button"
-          onClick={onExport}
-          disabled={!canExport || exporting}
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-brand-500 to-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 transition-opacity hover:opacity-90 disabled:opacity-40"
-        >
-          <Download className="h-4 w-4" />
-          {exporting ? 'Exporting…' : 'Download .MID'}
-        </button>
+        <div className="ml-auto flex items-center gap-4">
+          <span className="font-mono text-xs text-neutral-500">
+            {noteCount} note{noteCount === 1 ? '' : 's'}
+          </span>
+          <button
+            type="button"
+            onClick={onExport}
+            disabled={!canExport || exporting}
+            className="inline-flex items-center gap-2 rounded bg-brand-500 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-brand-600 active:scale-95 disabled:opacity-40"
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            {exporting ? 'Exporting…' : 'Download .mid'}
+          </button>
+        </div>
       </div>
     </section>
   );
 }
-

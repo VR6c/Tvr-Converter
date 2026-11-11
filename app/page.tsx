@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
-import { AlertCircle, Keyboard, Loader2 } from 'lucide-react';
+import { AlertCircle, Loader2 } from 'lucide-react';
 import Header from '@/components/Header';
 import Dropzone from '@/components/Dropzone';
 import ControlToolbar from '@/components/ControlToolbar';
@@ -20,7 +20,6 @@ import {
   stopAudition,
   unlockAudio,
 } from '@/lib/audio/synth';
-import { cn } from '@/lib/utils';
 
 /* Canvas-heavy components are client-only. */
 const WaveformView = dynamic(() => import('@/components/WaveformView'), {
@@ -197,10 +196,12 @@ export default function Page() {
   /* Spacebar and R keyboard shortcuts for Play, Pause, Replay */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      const el = e.target as HTMLElement | null;
+      if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
 
       if (e.code === 'Space') {
+        // Space already activates a focused button / combobox natively.
+        if (el?.closest('button, [role="combobox"], [role="option"]')) return;
         e.preventDefault();
         togglePlay();
       } else if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey) {
@@ -240,7 +241,7 @@ export default function Page() {
         particleCount: 90,
         spread: 70,
         origin: { y: 0.75 },
-        colors: ['#5b8cff', '#8b5cf6', '#22d3ee'],
+        colors: ['#35c2b2', '#6fdccd', '#f97316'],
       });
     } catch (err) {
       if ((err as DOMException)?.name !== 'AbortError') {
@@ -269,115 +270,131 @@ export default function Page() {
           : 'Idle';
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1400px] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+    <>
       <Header provider={provider} status={statusLabel} />
 
-      {/* Progress strip */}
       {busy && (
-        <div className="h-1 w-full overflow-hidden rounded-full bg-white/5">
+        <div
+          role="progressbar"
+          aria-label="Transcription progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+          className="h-0.5 w-full bg-line"
+        >
           <div
-            className="h-full rounded-full bg-gradient-to-r from-brand-500 to-indigo-500 transition-[width] duration-200"
+            className="h-full bg-brand-400 transition-[width] duration-200"
             style={{ width: `${Math.max(4, progress * 100)}%` }}
           />
         </div>
       )}
 
-      {error && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      <Dropzone
-        fileName={fileName}
-        busy={busy}
-        onFile={(f) => void loadFile(f)}
-        onRecording={handleRecording}
-        onClear={reset}
-      />
-
-      <ControlToolbar
-        settings={settings}
-        onChange={updateSettings}
-        onAutoDetectKey={autoDetectKey}
-        onAutoDetectTempo={autoDetectTempo}
-        detectedKeyLabel={detectedKeyLabel}
-        detectedTempoLabel={detectedTempoLabel}
-        disabled={busy}
-      />
-
-      <WaveformView
-        ref={waveRef}
-        url={audioUrl}
-        onTime={(t) => {
-          if (!audioUrl) return;
-          playheadRef.current = t;
-          setCurrentTime(t);
-          if (!playing) {
-            seekAudition(t);
-          }
-        }}
-        onFinish={() => {
-          stopPlayback();
-          playheadRef.current = effectiveDuration;
-          setCurrentTime(effectiveDuration);
-        }}
-      />
-
-      <section className="space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="flex items-center gap-2 text-sm font-medium text-white/70">
-            <Keyboard className="h-4 w-4 text-brand-400" /> Piano Roll
-          </h2>
-          <div className="flex items-center gap-2">
-            {status === 'transcribing' && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-white/45">
-                <Loader2 className="h-3 w-3 animate-spin text-brand-400" />
-                {Math.round(progress * 100)}%
-              </span>
-            )}
-            {audioUrl && !busy && (
-              <button
-                type="button"
-                onClick={() => void transcribe()}
-                className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white"
-              >
-                Re-transcribe
-              </button>
-            )}
-          </div>
-        </div>
-
-        {notes.length === 0 && !busy ? (
+      <main className="mx-auto flex w-full max-w-[1400px] flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8 [&>*]:animate-in [&>*]:fade-in [&>*]:duration-500 [&>*]:fill-mode-backwards [&>*:nth-child(2)]:delay-75 [&>*:nth-child(3)]:delay-100 [&>*:nth-child(4)]:delay-150 [&>*:nth-child(5)]:delay-200">
+        {error && (
           <div
-            className={cn(
-              'flex h-[420px] flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-[#0e1117]/60 text-center',
-            )}
+            role="alert"
+            className="flex items-start gap-2 rounded-md border border-red-500/40 animate-in fade-in slide-in-from-top-2 duration-200 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-200"
           >
-            <Keyboard className="h-8 w-8 text-white/15" />
-            <p className="text-sm text-white/40">
-              Notes will appear here after transcription
-            </p>
-            <p className="text-xs text-white/25">
-              Drop an audio file or record your mic to begin
-            </p>
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span>
+              <strong className="font-medium">Error: </strong>
+              {error}
+            </span>
           </div>
-        ) : (
-          <PianoRoll
-            ref={rollRef}
-            notes={notes}
-            settings={settings}
-            duration={effectiveDuration}
-            playheadRef={playheadRef}
-            playing={playing}
-            selectedId={selectedNoteId}
-            onSelect={selectNote}
-            onNotesChange={commitNotes}
-            onSeek={handleSeek}
-          />
         )}
-      </section>
+
+        <Dropzone
+          fileName={fileName}
+          busy={busy}
+          onFile={(f) => void loadFile(f)}
+          onRecording={handleRecording}
+          onClear={reset}
+        />
+
+        <ControlToolbar
+          settings={settings}
+          onChange={updateSettings}
+          onAutoDetectKey={autoDetectKey}
+          onAutoDetectTempo={autoDetectTempo}
+          detectedKeyLabel={detectedKeyLabel}
+          detectedTempoLabel={detectedTempoLabel}
+          disabled={busy}
+        />
+
+        <WaveformView
+          ref={waveRef}
+          url={audioUrl}
+          onTime={(t) => {
+            if (!audioUrl) return;
+            playheadRef.current = t;
+            setCurrentTime(t);
+            if (!playing) {
+              seekAudition(t);
+            }
+          }}
+          onFinish={() => {
+            stopPlayback();
+            playheadRef.current = effectiveDuration;
+            setCurrentTime(effectiveDuration);
+          }}
+        />
+
+        <section aria-labelledby="piano-roll-heading" className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h2
+              id="piano-roll-heading"
+              className="text-sm font-medium text-neutral-300"
+            >
+              Piano roll
+            </h2>
+            <div className="flex items-center gap-3">
+              {status === 'transcribing' && (
+                <span className="inline-flex items-center gap-1.5 font-mono text-xs text-neutral-500">
+                  <Loader2
+                    className="h-3 w-3 animate-spin text-brand-400"
+                    aria-hidden
+                  />
+                  {Math.round(progress * 100)}%
+                </span>
+              )}
+              {audioUrl && !busy && (
+                <button
+                  type="button"
+                  onClick={() => void transcribe()}
+                  className="rounded border border-line-strong px-2.5 py-1 text-xs font-medium text-neutral-300 hover:bg-neutral-100/5"
+                >
+                  Re-transcribe
+                </button>
+              )}
+            </div>
+          </div>
+
+          {notes.length === 0 && !busy ? (
+            <div
+              role="status"
+              className="flex h-[420px] animate-in fade-in flex-col items-center justify-center gap-1.5 rounded-md border border-dashed border-line bg-surface text-center duration-300"
+            >
+              <p className="text-sm text-neutral-400">No notes yet</p>
+              <p className="text-xs text-neutral-500">
+                Load an audio file and the transcribed notes will appear here.
+              </p>
+            </div>
+          ) : (
+            <PianoRoll
+              ref={rollRef}
+              notes={notes}
+              settings={settings}
+              duration={effectiveDuration}
+              playheadRef={playheadRef}
+              playing={playing}
+              selectedId={selectedNoteId}
+              onSelect={selectNote}
+              onNotesChange={commitNotes}
+              onSeek={handleSeek}
+            />
+          )}
+        </section>
+      </main>
 
       <TransportBar
         playing={playing}
@@ -397,13 +414,6 @@ export default function Page() {
         canPlay={canPlay}
         noteCount={notes.length}
       />
-
-      <footer className="pb-6 pt-2 text-center text-[11px] leading-relaxed text-white/25">
-        All decoding, inference and MIDI generation run locally in your browser.
-        <br />
-        Zero audio uploaded. Built with Next.js · ONNX Runtime Web · Tone.js · Web Audio API
-      </footer>
-    </main>
+    </>
   );
 }
-

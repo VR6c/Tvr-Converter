@@ -152,17 +152,17 @@ export default function Select<T extends string>({
         onClick={() => (open ? closeMenu() : openMenu())}
         onKeyDown={handleKeyDown}
         className={cn(
-          'inline-flex w-full items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/30 px-2.5 py-1.5 text-xs text-white/85 outline-none transition-colors',
-          'hover:border-white/20 focus-visible:border-brand-500/60 disabled:opacity-40 disabled:hover:border-white/10',
-          open && 'border-brand-500/60',
+          'inline-flex w-full items-center justify-between gap-2 rounded border border-line bg-surface-sunken px-2.5 py-1.5 text-xs text-neutral-200 outline-none transition-colors',
+          'hover:border-line-strong focus-visible:border-brand-400 disabled:opacity-40 disabled:hover:border-line',
+          open && 'border-brand-400',
         )}
       >
-        <span className={cn('truncate', !selected && 'text-white/40')}>
+        <span className={cn('truncate', !selected && 'text-neutral-500')}>
           {selected ? selected.label : placeholder}
         </span>
         <ChevronDown
           className={cn(
-            'h-3 w-3 shrink-0 text-white/40 transition-transform',
+            'h-3 w-3 shrink-0 text-neutral-500 transition-transform',
             open && 'rotate-180',
           )}
         />
@@ -173,7 +173,7 @@ export default function Select<T extends string>({
           ref={listRef}
           id={listId}
           role="listbox"
-          className="absolute left-0 top-full z-50 mt-1 max-h-60 min-w-full overflow-y-auto rounded-lg border border-white/10 bg-[#151922] p-1 shadow-xl shadow-black/40"
+          className="absolute left-0 top-full z-50 mt-1 origin-top animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-100 max-h-60 min-w-full overflow-y-auto rounded border border-line-strong bg-surface-raised p-1"
         >
           {options.map((o, i) => {
             const isSelected = o.value === value;
@@ -189,7 +189,7 @@ export default function Select<T extends string>({
                 onClick={() => commit(i)}
                 className={cn(
                   'flex cursor-pointer items-center justify-between gap-3 whitespace-nowrap rounded-md px-2 py-1.5 text-xs',
-                  isSelected ? 'text-brand-300' : 'text-white/75',
+                  isSelected ? 'text-brand-300' : 'text-neutral-300',
                   i === activeIndex && 'bg-white/10 text-white',
                 )}
               >

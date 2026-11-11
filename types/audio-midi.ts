@@ -41,6 +41,7 @@ export interface TempoDetectionResult {
 /* ---------------- Worker protocol ---------------- */
 export interface TranscribeRequest {
   type: 'transcribe';
+  jobId: number;
   samples: Float32Array;
   sampleRate: number;
   settings: ConverterSettings;
@@ -48,9 +49,10 @@ export interface TranscribeRequest {
 
 export type WorkerRequest = TranscribeRequest;
 
+/** Job-scoped messages carry the `jobId` of the request that produced them. */
 export type WorkerResponse =
-  | { type: 'progress'; value: number }
+  | { type: 'progress'; jobId: number; value: number }
   | { type: 'provider'; provider: ExecutionProvider }
-  | { type: 'result'; notes: TranscribedNote[] }
-  | { type: 'error'; message: string };
+  | { type: 'result'; jobId: number; notes: TranscribedNote[] }
+  | { type: 'error'; jobId?: number; message: string };
 
