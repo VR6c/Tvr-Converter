@@ -2,11 +2,10 @@
 
 import dynamic from 'next/dynamic';
 import { useCallback, useRef, useState } from 'react';
-import { AlertCircle, Loader2 } from 'lucide-react';
+import { AlertCircle, Download, Loader2 } from 'lucide-react';
 import Header from '@/components/Header';
 import Dropzone from '@/components/Dropzone';
 import ControlToolbar from '@/components/ControlToolbar';
-import TransportBar from '@/components/TransportBar';
 import type { WaveformHandle } from '@/components/WaveformView';
 import type { PianoRollHandle } from '@/components/PianoRoll';
 import { useConverterStore } from '@/lib/store/useConverterStore';
@@ -62,13 +61,6 @@ export default function Page() {
   const {
     playheadRef,
     playing,
-    currentTime,
-    volume,
-    setVolume,
-    soloSynth,
-    soloAudio,
-    toggleSoloSynth,
-    toggleSoloAudio,
     togglePlay,
     rewind,
     seek,
@@ -207,6 +199,15 @@ export default function Page() {
                   Re-transcribe
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => void handleExport()}
+                disabled={!canExport || exporting}
+                className="inline-flex items-center gap-1.5 rounded bg-brand-500 px-3 py-1 text-xs font-semibold text-white transition-all hover:bg-brand-600 active:scale-95 disabled:opacity-40"
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden />
+                {exporting ? 'Exporting…' : 'Download .mid'}
+              </button>
             </div>
           </div>
 
@@ -236,25 +237,6 @@ export default function Page() {
           )}
         </section>
       </main>
-
-      <TransportBar
-        playing={playing}
-        onTogglePlay={togglePlay}
-        onRewind={rewind}
-        currentTime={currentTime}
-        duration={effectiveDuration}
-        volume={volume}
-        onVolume={setVolume}
-        soloSynth={soloSynth}
-        soloAudio={soloAudio}
-        onSoloSynth={toggleSoloSynth}
-        onSoloAudio={toggleSoloAudio}
-        onExport={handleExport}
-        exporting={exporting}
-        canExport={canExport}
-        canPlay={canPlay}
-        noteCount={notes.length}
-      />
     </>
   );
 }
