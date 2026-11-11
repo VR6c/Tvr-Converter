@@ -1,12 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  experimental: {
-    // Ship the yt-dlp / ffmpeg binaries with the key & BPM function on Vercel.
-    outputFileTracingIncludes: {
-      '/api/detect-key-bpm': ['./bin/yt-dlp', './node_modules/ffmpeg-static/ffmpeg'],
-    },
-  },
   webpack: (config, { isServer }) => {
     config.experiments = { ...config.experiments, asyncWebAssembly: true, layers: true };
 

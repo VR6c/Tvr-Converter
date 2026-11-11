@@ -7,7 +7,6 @@ import { AlertCircle, Keyboard, Loader2 } from 'lucide-react';
 import Header from '@/components/Header';
 import Dropzone from '@/components/Dropzone';
 import ControlToolbar from '@/components/ControlToolbar';
-import YoutubeKeyBpmDetector from '@/components/YoutubeKeyBpmDetector';
 import TransportBar from '@/components/TransportBar';
 import type { WaveformHandle } from '@/components/WaveformView';
 import type { PianoRollHandle } from '@/components/PianoRoll';
@@ -298,12 +297,6 @@ export default function Page() {
         onClear={reset}
       />
 
-      <YoutubeKeyBpmDetector
-        settings={settings}
-        onApply={updateSettings}
-        disabled={busy}
-      />
-
       <ControlToolbar
         settings={settings}
         onChange={updateSettings}
@@ -409,16 +402,6 @@ export default function Page() {
         All decoding, inference and MIDI generation run locally in your browser.
         <br />
         Zero audio uploaded. Built with Next.js · ONNX Runtime Web · Tone.js · Web Audio API
-        <br />
-        Song key &amp; BPM data by{' '}
-        <a
-          href="https://getsongbpm.com"
-          target="_blank"
-          rel="noopener"
-          className="underline hover:text-white/50"
-        >
-          GetSongBPM
-        </a>
       </footer>
     </main>
   );

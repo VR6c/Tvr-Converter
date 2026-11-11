@@ -28,7 +28,7 @@ const COARSE_WINDOW = 4096;
 /* ---------------- FFT ---------------- */
 
 /** In-place iterative radix-2 FFT. Length must be a power of two. */
-export function fft(re: Float32Array, im: Float32Array): void {
+function fft(re: Float32Array, im: Float32Array): void {
   const n = re.length;
   for (let i = 1, j = 0; i < n; i++) {
     let bit = n >> 1;
