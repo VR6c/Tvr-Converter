@@ -1,80 +1,141 @@
-# Audio → MIDI (Client-Side SaaS)
+# Audio → MIDI
 
-100% in-browser audio-to-MIDI transcription web application built with **Next.js (App Router)**, **TypeScript**, **Tailwind CSS**, **Web Audio API**, **WebGPU/WASM**, and **ONNX Runtime Web**.
+Convert audio to MIDI entirely in your browser — no uploads, no servers, no data leaves your device.
 
-Zero audio data ever leaves the user's browser.
+Built with **Next.js 14**, **TypeScript**, **Tailwind CSS**, **ONNX Runtime Web**, and the **Web Audio API**.
 
 ---
 
-## Key Features
+## Features
 
-- **Zero-Server Processing (Client-Side First)**: Audio decoding, DSP pitch tracking, neural network inference, scale snapping, and MIDI serialization execute 100% in the user's browser.
-- **Dedicated Web Worker Isolation**: Heavy math (Radix-2 FFT, sliding window inference, sample rate conversion, and peak picking) runs inside a dedicated Web Worker via Transferable `ArrayBuffer` objects to maintain 60 FPS UI fluidity.
-- **Hardware-Accelerated ML Inference**: Targets **WebGPU** execution provider first, with graceful fallback to multi-threaded **WebAssembly (WASM)** with SIMD.
-- **Dual Processing Engines**:
-  - **Neural (Basic Pitch)**: Slotted for `public/models/basic-pitch.onnx` with automatic runtime detection.
-  - **DSP Engine**: Integrated fallback engine with **YIN algorithm** & parabolic sub-cent f0 interpolation for voice mode and **multi-band harmonic salience peak-tracking** for polyphonic instruments.
-- **Catch Every Note Sensitivity Controls**:
-  - High: 0.35 threshold (fast, subtle runs)
-  - Mid: 0.50 threshold (balanced)
-  - Low: 0.65 threshold (rejects background room noise & breath)
-- **Musical Snapping & Quantization**:
-  - Auto Key Detection via Krumhansl-Schmuckler chroma correlation.
-  - Scale snapping: Major, Minor, Harmonic Minor, Dorian, Mixolydian, Pentatonic, Chromatic.
-  - Snapping intensities: Off, Soft (preserves microtonal glide curves in pitch bend), Perfect.
-  - Timing grid quantization: Off, 1/8, 1/16, 1/32 with 40–240 BPM tempo clock.
-- **Interactive HTML5 Canvas Piano Roll**:
-  - Chromatic lanes (A0 to C8), alternating key background, beat/measure grid lines.
-  - Velocity color-coded note rectangles with pitch tags.
-  - Note drag/move, left/right edge resize duration, double-click add/remove, Ctrl/Cmd+wheel zoom.
-  - Synchronized playhead animation.
-- **Audition Synth & Audio Preview**:
-  - Tone.js PolySynth preview with octave transposition (-2 to +2).
-  - WaveSurfer.js audio waveform visualization with scrub & seek.
-  - Solo Synth / Solo Audio balance controls.
-- **Standard MIDI File Exporter**:
-  - Uses `@tonejs/midi` to serialize SMF Type 1 files with BPM tempo meta tracks, velocity, and microtonal pitch bends.
-  - Supports modern File System Access API (`window.showSaveFilePicker()`) with instant Blob fallback.
+### 🧠 Dual Transcription Engines
+- **Neural (Basic Pitch)** — place `basic-pitch.onnx` in `public/models/` to enable WebGPU-accelerated neural pitch detection with automatic WASM fallback.
+- **DSP Engine** — always-available built-in engine: YIN algorithm with parabolic interpolation for monophonic voice/melody, multi-band harmonic salience peak-tracking for polyphonic instruments.
+
+### ⚡ Performance
+- All heavy work (FFT, sliding-window inference, resampling) runs inside a **dedicated Web Worker** via transferable `ArrayBuffer`s — UI stays at 60 FPS.
+- WebGPU → multithreaded WASM+SIMD execution provider chain, selected automatically at runtime.
+
+### 🎵 Musical Correction
+| Feature | Options |
+|---|---|
+| **Sensitivity** | High (0.35) · Mid (0.50) · Low (0.65) |
+| **Key Detection** | Auto via Krumhansl-Schmuckler chroma correlation |
+| **Scale Snapping** | Off · Soft (preserves pitch bend) · Perfect — Major, Minor, Harmonic Minor, Dorian, Mixolydian, Pentatonic, Chromatic |
+| **Timing Grid** | Off · 1/8 · 1/16 · 1/32 at 40–240 BPM |
+
+### 🎹 Interactive Piano Roll
+- Chromatic grid A0–C8 with velocity-colored notes and beat/measure lines.
+- Drag to move, edge-drag to resize duration, double-click to add/delete.
+- `Ctrl/Cmd` + scroll to zoom, synchronized playhead.
+
+### 🔊 Audio Preview
+- **Tone.js PolySynth** audition with ±2 octave transposition.
+- **WaveSurfer.js** waveform scrubber with Solo Synth / Solo Audio mix control.
+
+### 💾 MIDI Export
+- Exports SMF Type 1 (`.mid`) with BPM meta track, velocity, and microtonal pitch bends via `@tonejs/midi`.
+- Uses File System Access API (`showSaveFilePicker`) with an instant Blob URL fallback.
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies (also executes postinstall scripts/copy-ort.mjs)
+# Install dependencies (also runs scripts/copy-ort.mjs to stage ONNX Runtime WASM assets)
 npm install
 
-# 2. Run the development server
+# Start dev server
 npm run dev
+```
 
-# 3. Open in your browser
-http://localhost:3000
+Open [http://localhost:3000](http://localhost:3000).
+
+> **Optional neural model** — download `basic-pitch.onnx` from [Spotify's Basic Pitch](https://github.com/spotify/basic-pitch) and place it in `public/models/`. Without it the DSP engine runs automatically.
+
+---
+
+## How It Works
+
+```
+Audio Input  (mic / file drop: .wav .mp3 .m4a .flac)
+     │
+     ▼  Web Audio API (main thread)
+     │  · AudioContext.decodeAudioData()  →  mono PCM
+     │  · OfflineAudioContext resample   →  22,050 Hz
+     │
+     ▼  postMessage (Transferable ArrayBuffer)
+     │
+     ▼  Web Worker
+     │  · ONNX Runtime Web  (WebGPU → WASM SIMD fallback)
+     │      Basic Pitch neural inference  (onset · note · contour)
+     │  · DSP fallback
+     │      YIN f0 + parabolic interpolation  (voice/melody)
+     │      Multi-band harmonic salience      (instrument/poly)
+     │  · Onset thresholding  ·  gap merging  ·  ≥ 60 ms gate
+     │
+     ▼  TranscribedNote[]  →  main thread
+        · Krumhansl-Schmuckler key detection + scale snap
+        · Timing grid quantization
+        · Canvas Piano Roll  (zoom · drag · resize · delete)
+        · Tone.js synth  +  WaveSurfer waveform
+        · @tonejs/midi  →  SMF .mid export
 ```
 
 ---
 
-## Architecture Flow
+## Project Structure
 
 ```
-[Audio Input: Mic / File Drop (.wav, .mp3, .m4a, .flac)]
-        │
-        ▼
-[Web Audio API (Main Thread)]
-  - Decode PCM via AudioContext.decodeAudioData()
-  - Downmix multi-channel audio to mono
-  - OfflineAudioContext resample to 22,050 Hz
-        │
-        ▼ (Transferable ArrayBuffer via postMessage)
-[Dedicated Web Worker Pipeline]
-  - ONNX Runtime Web (WebGPU -> WASM SIMD fallback)
-  - Basic Pitch / DSP YIN & Salience peak picking
-  - Dynamic onset thresholding & debounce (>= 60ms)
-        │
-        ▼ (Transcribed Note Entities)
-[Main Thread Application State]
-  - Musical Snapping (Krumhansl-Schmuckler key detection + grid)
-  - Interactive Canvas Piano Roll (zoom, drag, resize, delete)
-  - Tone.js Audition Synthesizer + WaveSurfer Waveform
-  - MIDI Serializer (@tonejs/midi) -> File Blob / File System API
+app/                    Next.js App Router entry
+components/
+  PianoRoll/            Canvas piano roll + minimap + toolbar
+  Dropzone              Audio file / mic input
+  WaveformView          WaveSurfer waveform wrapper
+  ControlToolbar        Sensitivity, key, scale, quantize controls
+hooks/
+  useRecorder           MediaRecorder hook for mic input
+lib/
+  audio/                MIDI writer, resampler, Tone.js synth
+  dsp/                  Tempo detection, note quantizer
+  store/                Zustand global state
+  worker/               Web Worker client wrapper
+workers/
+  inference.worker.ts   ONNX + DSP transcription pipeline
+public/
+  models/               Drop basic-pitch.onnx here
+  ort/                  ONNX Runtime WASM assets (auto-generated by postinstall)
 ```
 
+---
+
+## Deployment
+
+The app is a fully static Next.js site — deploy anywhere static hosting is supported.
+
+### Vercel (recommended)
+
+```bash
+# Push to GitHub then import at vercel.com/new
+git remote add origin https://github.com/<you>/audio-to-midi.git
+git push -u origin main
+```
+
+Vercel auto-runs `npm install` (which triggers `postinstall` to stage the ORT WASM assets) then `npm run build`. No environment variables required.
+
+> **COOP/COEP headers** are configured in both `next.config.mjs` and `vercel.json` — required for `SharedArrayBuffer` / multi-threaded WASM.
+
+---
+
+## Tech Stack
+
+| Layer | Library |
+|---|---|
+| Framework | Next.js 14 (App Router) |
+| Language | TypeScript 5 |
+| Styling | Tailwind CSS 3 |
+| ML Inference | ONNX Runtime Web 1.19 |
+| MIDI | @tonejs/midi |
+| Synth | Tone.js |
+| Waveform | WaveSurfer.js |
+| State | Zustand |
