@@ -409,6 +409,16 @@ export default function Page() {
         All decoding, inference and MIDI generation run locally in your browser.
         <br />
         Zero audio uploaded. Built with Next.js · ONNX Runtime Web · Tone.js · Web Audio API
+        <br />
+        Song key &amp; BPM data by{' '}
+        <a
+          href="https://getsongbpm.com"
+          target="_blank"
+          rel="noopener"
+          className="underline hover:text-white/50"
+        >
+          GetSongBPM
+        </a>
       </footer>
     </main>
   );
