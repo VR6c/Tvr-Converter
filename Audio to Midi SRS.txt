@@ -1,0 +1,213 @@
+================================================================================
+SOFTWARE REQUIREMENTS SPECIFICATION (SRS)
+System: Web-Based Audio-to-MIDI SaaS Application
+Document Version: 1.0.0
+Status: Approved / Architecture Ready
+Author: Engineering Architecture Team
+Target Stack: Next.js (TypeScript), Web Audio API, ONNX Runtime Web, Tone.js
+================================================================================
+
+1. INTRODUCTION
+
+1.1 Purpose
+This Software Requirements Specification (SRS) defines the functional, non-
+functional, and interface requirements for developing a client-first, web-native 
+Audio-to-MIDI SaaS application. The software translates sung melodies, hummed 
+tunes, and recorded instrument audio into standard musical notes and Standard 
+MIDI Files (.mid), complete with automatic key/scale detection, pitch snapping, 
+rhythmic quantization, audio previewing, and an interactive piano roll editor.
+
+1.2 Scope
+The primary runtime environment is modern desktop and mobile browsers. Digital 
+signal processing (DSP), neural network inference, note quantization, and MIDI 
+serialization run client-side using Web Audio API, Web Workers, and WebGPU/WASM. 
+This architecture ensures zero GPU server overhead, complete data privacy, and 
+zero-latency round trips. Optional backend services handle authentication, 
+cloud storage, and premium stem-separation features.
+
+1.3 Definitions and Abbreviations
+- DAW: Digital Audio Workstation (e.g., Ableton Live, FL Studio, Logic Pro).
+- MIDI: Musical Instrument Digital Interface.
+- SMF: Standard MIDI File (.mid).
+- f0: Fundamental Frequency (lowest frequency of a periodic musical waveform).
+- Cent: 1/100th of a semitone (logarithmic unit of musical interval).
+- ONNX: Open Neural Network Exchange.
+- WASM: WebAssembly.
+- WebGPU: Next-generation browser API for hardware-accelerated compute shaders.
+- Debounce: Time-based gating used to prevent transient artifacts from firing.
+- Hysteresis: Lag threshold preventing vibrato from triggering false note-ons.
+
+1.4 References
+- IEEE Std 830-1998: Recommended Practice for Software Requirements Specs.
+- W3C Web Audio API Specification (W3C Working Draft / Rec).
+- The Complete MIDI 1.0 Detailed Specification (MIDI Association).
+- Spotify Basic Pitch Research & ONNX Runtime Web Documentation.
+
+
+================================================================================
+2. SYSTEM ARCHITECTURE & OPERATIONAL OVERVIEW
+
+2.1 Architectural Flow
++------------------------------------------------------------------------------+
+| BROWSER CLIENT (Next.js / TypeScript)                                        |
+|                                                                              |
+|  [Audio Input: Mic Stream / File Drop (.wav, .mp3, .m4a)]                    |
+|           |                                                                  |
+|           v                                                                  |
+|  [Web Audio API (Main Thread)]                                               |
+|     - Decode to PCM via AudioContext.decodeAudioData()                       |
+|     - Downmix multi-channel audio to Mono                                    |
+|     - OfflineAudioContext Resample to 22,050 Hz                              |
+|           |                                                                  |
+|           v (Transferable ArrayBuffer via postMessage)                       |
+|  [Dedicated Web Worker Pipeline]                                             |
+|     - ONNX Runtime Web (WebGPU compute provider with WASM SIMD fallback)    |
+|     - Basic Pitch Inference (Onset, Note-Frame, and Contour Matrices)        |
+|     - Peak Picking & Dynamic Onset Thresholding                              |
+|     - Pitch-Bend Smoothing & Duration Debouncing (>= 60ms)                   |
+|     - Musical Scale Snapping & Rhythmic Grid Quantization                    |
+|           |                                                                  |
+|           v (Transcribed Note Entities)                                      |
+|  [Main Thread Application State]                                             |
+|     - Interactive Piano Roll Canvas (Zoom, Drag, Resize, Delete)             |
+|     - Low-Latency In-Browser Preview Synthesizer                             |
+|     - MIDI Serializer (@tonejs/midi) -> File Blob / File System API          |
++------------------------------------------------------------------------------+
+
+2.2 User Personas
+- Persona A: Bedroom Producer / Top-liner.
+  Hums and sings hooks into a laptop mic; cannot read sheet music or play 
+  keys; needs clean MIDI dragged into a DAW instantly.
+- Persona B: Acoustic Instrumentalist.
+  Records acoustic guitar, flute, or saxophone lines; wants fast multi-note 
+  or monophonic conversion without paying for expensive transcription tools.
+- Persona C: Sound Designer & Beatmaker.
+  Drops sample loops and vocal chops into the browser to extract baseline 
+  lead melodies and chord outlines.
+
+
+================================================================================
+3. SPECIFIC FUNCTIONAL REQUIREMENTS
+
+3.1 Audio Ingestion & Normalization
+- FR-1.1 (Mic Recording): The system shall record real-time audio via the 
+  navigator.mediaDevices.getUserMedia() API with automatic gain control toggle.
+- FR-1.2 (File Upload): The system shall support drag-and-drop and standard file 
+  dialog uploads for .wav, .mp3, .m4a, .aac, and .flac up to 100 MB.
+- FR-1.3 (Resampling & Mono Conversion): Incoming audio buffers of arbitrary 
+  sample rates (e.g., 44.1 kHz, 48 kHz, 96 kHz) shall be downmixed to mono 
+  and resampled to exactly 22,050 Hz using an OfflineAudioContext.
+
+3.2 Pitch Detection & Neural Inference Engine
+- FR-2.1 (Worker Isolation): Neural model inference and DSP calculations must 
+  execute inside a dedicated Web Worker to maintain UI frame rates >= 60 FPS.
+- FR-2.2 (Backend Acceleration): The ONNX runtime shall query WebGPU support 
+  first; if unavailable or shader initialization fails, it shall gracefully 
+  fall back to multi-threaded WebAssembly (WASM) with SIMD.
+- FR-2.3 (Mode Selection):
+  * Voice Mode: Optimized for monophonic lines, glide continuity, and vibrato 
+    suppression.
+  * Instrument Mode: Optimized for polyphonic pitch tracking (chords on piano, 
+    guitar, brass ensembles).
+- FR-2.4 (Catch Every Note - Sensitivity): The system shall expose a 3-tier 
+  sensitivity control:
+  * Low: Onset activation threshold = 0.65 (ignores background hum & breaths).
+  * Mid: Onset activation threshold = 0.50 (balanced transcription).
+  * High: Onset activation threshold = 0.35 (picks up fast, quiet runs).
+- FR-2.5 (Debounce / Minimum Duration): Notes shorter than 60 milliseconds must 
+  be discarded automatically to eliminate transient spit, lip smacks, and clicks.
+
+3.3 Musical Correction & Quantization
+- FR-3.1 (Auto Key Detection): The system shall compute a 12-pitch chroma class 
+  distribution from detected notes and calculate the top matching key/mode.
+- FR-3.2 (Key & Scale Override): The user shall be able to lock the transcription 
+  to any root note (C, C#, D... B) and scale type (Major, Natural Minor, 
+  Harmonic Minor, Dorian, Mixolydian, Pentatonic, Chromatic).
+- FR-3.3 (Note Snap Levels):
+  * Off: Outputs raw unquantized MIDI semitones with continuous microtonal bends.
+  * Soft: Anchors root pitch to the scale while retaining subtle glide curves.
+  * Perfect: Hard-clamps every note pitch strictly to the nearest scale degree.
+- FR-3.4 (Timing Grid Quantization): The system shall align note start and 
+  duration boundaries to tempo subdivisions: Off, 1/8, 1/16, or 1/32, based 
+  on a user-specified or tap-tempo value (40 to 240 BPM).
+
+3.4 Visual Piano Roll & Auditioning
+- FR-4.1 (Canvas Display): The application shall draw an interactive piano roll 
+  with chromatic pitch lanes (C0 to B8), measure bars, and note rectangles.
+- FR-4.2 (Note Editing): The user shall be able to:
+  * Click and drag notes horizontally (time shift) and vertically (pitch shift).
+  * Drag note edges to lengthen or shorten note durations.
+  * Select and delete stray notes, or double-click to create new note blocks.
+- FR-4.3 (Synchronized Playback): The system shall include an in-browser Web 
+  Audio synth (sine/sawtooth/polyphonic oscillator) to audition transcribed 
+  notes against the original audio with a synchronized visual playhead.
+- FR-4.4 (Octave Shift): The audition module shall allow real-time transposition 
+  across -2, -1, 0, +1, and +2 octaves without re-running model inference.
+
+3.5 MIDI Generation & Export
+- FR-5.1 (Standard MIDI Serialization): The system shall compile note objects 
+  into a Standard MIDI File (SMF Type 0 or Type 1) containing Note-On, 
+  Note-Off, Velocity, and Tempo headers.
+- FR-5.2 (Browser Download): The system shall export the MIDI data as an 
+  in-memory Blob and trigger an immediate .mid file download.
+- FR-5.3 (File System Access): Supported browsers shall allow direct saving to 
+  local DAW project folders via the window.showSaveFilePicker() API.
+
+
+================================================================================
+4. NON-FUNCTIONAL REQUIREMENTS
+
+4.1 Performance & Resource Limits
+- NFR-1 (Inference Latency): Audio conversion must process faster than 0.25x 
+  real-time duration on WebGPU hardware (e.g., 20s audio completes in < 5s).
+- NFR-2 (Memory Ceiling): Peak browser heap memory consumption shall not 
+  exceed 300 MB during audio file decoding and neural inference.
+- NFR-3 (Model Bundle Size): Compressed ONNX model assets delivered over 
+  the network must be under 15 MB to ensure fast page load.
+- NFR-4 (UI Responsiveness): The piano roll canvas must maintain >= 58 FPS 
+  during zooming, panning, and playback scrubbing.
+
+4.2 Security & Data Privacy
+- NFR-5 (Zero-Knowledge Architecture): User vocal tracks, microphone recordings, 
+  and generated MIDI data must reside strictly in client browser memory. Audio 
+  shall never be uploaded to external servers without explicit user opt-in.
+- NFR-6 (Secure Context): All microphone streaming and Web Audio APIs must 
+  execute exclusively over TLS 1.3 (HTTPS) connections.
+
+4.3 Usability & Cross-Platform Support
+- NFR-7 (Click Efficiency): The primary workflow (Upload -> Transcribe -> 
+  Export .mid) must be complete in 3 clicks or fewer.
+- NFR-8 (Browser Compatibility): Google Chrome >= 113, Microsoft Edge >= 113, 
+  Safari >= 16.4, Mozilla Firefox >= 115.
+
+
+================================================================================
+5. DATA SCHEMAS & INTERFACES
+
+5.1 Transcribed Note Schema (TypeScript Contract)
+--------------------------------------------------------------------------------
+interface TranscribedNote {
+  id: string;               // Unique UUIDv4 identifier
+  pitch: number;            // MIDI Note Number: 0 to 127 (60 = C4)
+  startTime: number;        // Start offset in seconds relative to t = 0.000
+  duration: number;         // Note length in seconds
+  velocity: number;         // Dynamic strike velocity: 0.0 to 1.0
+  pitchBendCents?: number[];// Optional microtonal pitch variations (-100 to +100)
+}
+
+5.2 Engine Configuration Schema
+--------------------------------------------------------------------------------
+interface EngineSettings {
+  mode: 'voice' | 'instrument';
+  sensitivity: 'low' | 'mid' | 'high';
+  keyRoot: 'C'|'C#'|'D'|'D#'|'E'|'F'|'F#'|'G'|'G#'|'A'|'A#'|'B'|'auto';
+  scaleMode: 'major' | 'minor' | 'dorian' | 'pentatonic' | 'chromatic';
+  snapLevel: 'off' | 'soft' | 'perfect';
+  gridDivision: 'off' | '1/8' | '1/16' | '1/32';
+  tempoBpm: number;         // 40 to 240 BPM
+  octaveOffset: number;     // -2 to +2
+}
+
+================================================================================
+END OF SPECIFICATION DOCUMENT
+================================================================================
