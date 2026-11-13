@@ -321,9 +321,11 @@ export const useConverterStore = create<ConverterState>((set, get) => {
     async exportMidi() {
       const { notes, settings, fileName } = get();
       if (!notes.length) return;
-      const bytes = await notesToMidiBytes(notes, settings);
       const base = (fileName ?? 'transcription').replace(/\.[^.]+$/, '');
-      await saveMidiFile(bytes, `${base}-transcription.mid`);
+      await saveMidiFile(
+        () => notesToMidiBytes(notes, settings),
+        `${base}-transcription.mid`,
+      );
     },
 
     reset() {

@@ -65,30 +65,41 @@ export interface SaveResult {
   filename: string;
 }
 
-/** Download the MIDI file, preferring the File System Access API. */
-export async function saveMidiFile(
-  bytes: Uint8Array,
-  filename = 'transcription.mid',
-): Promise<SaveResult> {
-  const buffer = bytes.buffer.slice(
+type WritableHandle = {
+  createWritable: () => Promise<{
+    write: (data: ArrayBuffer) => Promise<void>;
+    close: () => Promise<void>;
+  }>;
+};
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
     bytes.byteOffset,
     bytes.byteOffset + bytes.byteLength,
   ) as ArrayBuffer;
+}
 
+/**
+ * Save the MIDI file, preferring the File System Access API.
+ *
+ * The picker needs a fresh user gesture, so it is opened before the bytes are
+ * built: encoding first (which lazy-loads @tonejs/midi) can outlast the click's
+ * activation window, and Chrome then refuses the picker.
+ */
+export async function saveMidiFile(
+  buildBytes: () => Promise<Uint8Array>,
+  filename = 'transcription.mid',
+): Promise<SaveResult> {
   const picker = (
     window as unknown as {
-      showSaveFilePicker?: (opts: unknown) => Promise<{
-        createWritable: () => Promise<{
-          write: (data: ArrayBuffer) => Promise<void>;
-          close: () => Promise<void>;
-        }>;
-      }>;
+      showSaveFilePicker?: (opts: unknown) => Promise<WritableHandle>;
     }
   ).showSaveFilePicker;
 
+  let handle: WritableHandle | null = null;
   if (typeof picker === 'function') {
     try {
-      const handle = await picker({
+      handle = await picker({
         suggestedName: filename,
         types: [
           {
@@ -97,16 +108,21 @@ export async function saveMidiFile(
           },
         ],
       });
-      const writable = await handle.createWritable();
-      await writable.write(buffer);
-      await writable.close();
-      return { method: 'picker', filename };
     } catch (err) {
       if ((err as DOMException)?.name === 'AbortError') {
         throw err; // user cancelled - do not fall through
       }
-      /* else fall back to the blob download */
+      console.warn('[export] save picker unavailable, downloading instead', err);
     }
+  }
+
+  const buffer = toArrayBuffer(await buildBytes());
+
+  if (handle) {
+    const writable = await handle.createWritable();
+    await writable.write(buffer);
+    await writable.close();
+    return { method: 'picker', filename };
   }
 
   const blob = new Blob([buffer], { type: 'audio/midi' });
@@ -122,4 +138,3 @@ export async function saveMidiFile(
   setTimeout(() => URL.revokeObjectURL(url), 120_000);
   return { method: 'download', filename };
 }
-
