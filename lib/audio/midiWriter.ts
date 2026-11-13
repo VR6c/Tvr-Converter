@@ -24,17 +24,25 @@ export async function notesToMidiBytes(
 
   for (const n of notes) {
     if (n.muted) continue;
+    // A non-finite time makes the encoder spin forever; skip corrupt notes.
+    if (
+      !Number.isFinite(n.pitch) ||
+      !Number.isFinite(n.startTime) ||
+      !Number.isFinite(n.duration)
+    ) {
+      continue;
+    }
     const pitch = clamp(Math.round(n.pitch) + octave, 0, 127);
     track.addNote({
       midi: pitch,
       time: Math.max(0, n.startTime),
       duration: Math.max(0.02, n.duration),
-      velocity: clamp(n.velocity, 0.05, 1),
+      velocity: clamp(Number.isFinite(n.velocity) ? n.velocity : 0.8, 0.05, 1),
     });
 
     // Microtonal pitch bend (cents -> normalized +-2 semitone range)
     const cents = n.pitchBendCents?.[0] ?? n.pitchBend?.[0];
-    if (cents && Math.abs(cents) > 1) {
+    if (cents && Number.isFinite(cents) && Math.abs(cents) > 1) {
       try {
         const ticks = Math.round(
           midi.header.secondsToTicks(Math.max(0, n.startTime)),
@@ -109,7 +117,9 @@ export async function saveMidiFile(
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  // Safari asks "allow downloads?" first and only then reads the blob, so the
+  // URL has to outlive that prompt - revoking after a few seconds fails the download.
+  setTimeout(() => URL.revokeObjectURL(url), 120_000);
   return { method: 'download', filename };
 }
 

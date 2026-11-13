@@ -100,7 +100,12 @@ export default function Page() {
       });
     } catch (err) {
       if ((err as DOMException)?.name !== 'AbortError') {
-        console.error(err);
+        console.error('[export] could not save the MIDI file', err);
+        useConverterStore.setState({
+          error: `Could not export the MIDI file${
+            err instanceof Error && err.message ? `: ${err.message}` : '.'
+          }`,
+        });
       }
     } finally {
       setExporting(false);
